@@ -83,8 +83,16 @@ data_path <- NULL;
 if(!is.null(data_path) && file.exists(data_path)){ dat0 <- import(data_path)
 } else {
   dat0 <- tribble(
-    # TODO NEXT:
-    # populate this table with the columns specified in Requirements above
-  )
+  ~hiding_spot,       ~clues_to_this_spot,                    ~max_incoming_edges, ~max_outgoing_edges, ~subclusters,
+  
+  "Kitchen sink",     "Look where water flows",                           1,                   2,   "indoors",
+  "Big oak tree",     "Roots of wisdom",                                  1,                   1,   "yard",
+  "Back door",        "Exit where inside meets outside",                  2,                   1,   "indoors:yard",
+  "Front porch",      "Take a seat in the open",                          1,                   1,   "DEFAULT",
+  "Couch",            "Soft and comfy",                                   1,                   3,   "indoors",
+  "Garage",           "Where things are stored",                          1,                   1,   "DEFAULT:indoors",
+  "Garden shed",      "Tools of the trade",                               0,                   2,   "yard",
+  "Bedroom closet",   "Hidden in plain sight",                            1,                   0,   "indoors"
+);
 }
 
