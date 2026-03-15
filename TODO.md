@@ -16,8 +16,10 @@ Based on the specs and current progress in main.R, here's a todo list for comple
 
 7. **Add main execution flow**: Integrate all steps into a cohesive script that reads input, processes data, builds graph, generates outputs, and handles errors.
 
-8. **Test with example data**: Run the full script on the provided example to verify outputs and constraints.
+8. **Test with example data**: Run the full script on the provided example to verify outputs and constraints. (done — script now builds a graph without constraint warnings.)
 
-9. **Add command-line or configurable input**: Allow data_path to be set via arguments or environment for real input files.
+9. **Persist output artifacts**: Add functionality to write the graph as a DOT file, render an SVG, and export the clue graph as a spreadsheet.
 
-10. **Code review and cleanup**: Ensure adherence to coding style (e.g., mandatory semicolons, line breaks, comments); remove unused code; optimize for readability.
+10. **Add command-line or configurable input**: Allow `data_path` to be set via arguments or environment for real input files.
+
+11. **Code review and cleanup**: Ensure adherence to coding style (e.g., mandatory semicolons, line breaks, comments); remove unused code; optimize for readability.

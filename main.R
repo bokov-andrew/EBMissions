@@ -92,7 +92,17 @@ if(!is.null(data_path) && file.exists(data_path)){ dat0 <- import(data_path)
   "Couch",            "Soft and comfy",                                   1,                   3,   "indoors",
   "Garage",           "Where things are stored",                          1,                   1,   "DEFAULT:indoors",
   "Garden shed",      "Tools of the trade",                               0,                   2,   "yard",
-  "Bedroom closet",   "Hidden in plain sight",                            1,                   0,   "indoors"
+  "Bedroom closet",   "Hidden in plain sight",                            1,                   0,   "indoors",
+  "Bookshelf",       "Knowledge lives here",                           1,                   2,   "indoors",
+  "Under stairs",    "Where shadows gather",                          1,                   2,   "indoors",
+  "Pool",            "Water and sun",                                 1,                   2,   "yard",
+  "Mailbox",         "Letters arrive",                                1,                   2,   "DEFAULT",
+  "Treehouse",       "High and cozy",                                  1,                   2,   "yard",
+  "Fireplace",       "Warmth at night",                               1,                   2,   "indoors",
+  "Toolbox",         "Fix what breaks",                               1,                   2,   "indoors:yard",
+  "Gazebo",          "Shelter in the yard",                           1,                   2,   "yard:DEFAULT",
+  "Attic",           "Up above",                                      1,                   1,   "indoors",
+  "Basement",        "Below ground",                                  1,                   1,   "indoors:DEFAULT"
 );
 }
 
@@ -180,49 +190,123 @@ dat1 <- dat0 %>% process_subclusters();
 dat2 <- dat1 %>% find_eligible_targets();
 
 # Preview processed data ----
-dat2 %>% select(hiding_spot, subcluster_vec, eligible_targets);
+# (disabled for non-interactive runs)
+# dat2 %>% select(hiding_spot, subcluster_vec, eligible_targets);
 
 # Graph Construction ----
 
 # Function: build_graph
-# Purpose: Randomly connect nodes into a directed graph respecting constraints. Input: processed data frame, Output: adjacency list (list of vectors of target indices).
-build_graph <- function(dat){
+# Purpose: Randomly connect nodes into a directed graph respecting constraints, with retries for min incoming and cycle check. Input: processed data frame, Output: adjacency list (list of target indices).
+build_graph <- function(dat, max_attempts = 100){
   nn <- nrow(dat);
-  adj <- vector("list", nn);
-  incoming <- rep(0, nn);
+  adj <- NULL;
+  g <- NULL;
+  is_valid <- FALSE;
 
-  # First pass: assign outgoing edges where possible
-  for (ii in 1:nn) {
-    max_out <- dat$max_outgoing_edges[ii];
-    eligible <- dat$eligible_targets[[ii]];
-    eligible <- setdiff(eligible, ii);  # no self-loops
-    candidates <- eligible[incoming[eligible] < dat$max_incoming_edges[eligible]];
-    current_out <- length(adj[[ii]]);
-    can_add <- max_out - current_out;
-    if (can_add > 0 && length(candidates) > 0) {
-      num_to_add <- min(can_add, length(candidates));
-      selected <- sample(candidates, num_to_add);
-      adj[[ii]] <- c(adj[[ii]], selected);
-      incoming[selected] <- incoming[selected] + 1;
-    };
-  };
+  for (attempt in 1:max_attempts){
+    adj <- vector("list", nn);
+    incoming <- rep(0, nn);
+    outgoing <- rep(0, nn);
+    node_order <- sample(1:nn);  # randomize order
 
-  # Second pass: ensure min incoming edges
-  for (ii in 1:nn) {
-    if (dat$max_incoming_edges[ii] > 0 && incoming[ii] == 0) {
-      possible_sources <- which(sapply(dat$eligible_targets, function(x) ii %in% x));
-      possible_sources <- setdiff(possible_sources, ii);
-      possible_sources <- possible_sources[sapply(adj[possible_sources], length) < dat$max_outgoing_edges[possible_sources]];
-      if (length(possible_sources) > 0) {
-        source <- sample(possible_sources, 1);
-        adj[[source]] <- c(adj[[source]], ii);
-        incoming[ii] <- incoming[ii] + 1;
-      };
-    };
-  };
+    # Assign outgoing edges greedily
+    for (ii in node_order){
+      max_out <- dat$max_outgoing_edges[ii];
+      eligible <- dat$eligible_targets[[ii]];
+      eligible <- setdiff(eligible, ii);  # no self-loops
+      candidates <- eligible[incoming[eligible] < dat$max_incoming_edges[eligible]];
+      num_to_add <- min(max_out - outgoing[ii], length(candidates));
+      if (num_to_add > 0){
+        selected <- sample(candidates, num_to_add);
+        adj[[ii]] <- selected;
+        incoming[selected] <- incoming[selected] + 1;
+        outgoing[ii] <- outgoing[ii] + num_to_add;
+      }
+    }
 
-  adj;
+    # Ensure min incoming edges by assigning one incoming edge where missing
+    need_in <- which(dat$max_incoming_edges > 0 & incoming == 0);
+    for (jj in need_in){
+      possible_sources <- which(sapply(dat$eligible_targets, function(x) jj %in% x));
+      possible_sources <- setdiff(possible_sources, jj);
+      possible_sources <- possible_sources[outgoing[possible_sources] < dat$max_outgoing_edges[possible_sources]];
+      if (length(possible_sources) > 0){
+        src <- sample(possible_sources, 1);
+        adj[[src]] <- c(adj[[src]], jj);
+        outgoing[src] <- outgoing[src] + 1;
+        incoming[jj] <- incoming[jj] + 1;
+      }
+    }
+
+    # Validate degrees
+    degrees_out <- outgoing;
+    degrees_in <- incoming;
+    degrees_ok <- all(degrees_in <= dat$max_incoming_edges) && all(degrees_out <= dat$max_outgoing_edges);
+
+    if (all(dat$max_incoming_edges == 0 | incoming >= 1) && degrees_ok){
+      is_valid <- TRUE;
+      break;
+    }
+  }
+
+  if (!is_valid){
+    warning("Could not build a valid graph after ", max_attempts, " attempts. Constraints may be too strict.");
+  }
+
+  list(adj = adj);
 };
 
 # Build the graph ----
-graph_adj <- dat2 %>% build_graph();
+graph_result <- build_graph(dat2);
+adj <- graph_result$adj;
+
+# Output Generation ----
+
+# Function: build_dot_string
+# Purpose: Create a Graphviz DOT representation of the graph. Input: data frame and adjacency list, Output: DOT string.
+build_dot_string <- function(dat, adj){
+  quote_label <- function(x) gsub("\"", "\\\"", x);
+
+  node_lines <- vapply(seq_len(nrow(dat)), function(ii){
+    label <- quote_label(dat$hiding_spot[ii]);
+    sprintf("  n%d [label=\"%s\"];", ii, label);
+  }, "")
+
+  edge_lines <- unlist(lapply(seq_along(adj), function(ii){
+    if(length(adj[[ii]]) == 0) return(character(0));
+    sprintf("  n%d -> n%d;", ii, adj[[ii]])
+  }));
+
+  c("digraph G {", "  rankdir=LR;", node_lines, edge_lines, "}");
+};
+
+# Function: build_clue_table
+# Purpose: Build a table where each row is a hiding spot and the outgoing clues it provides. Input: data frame and adjacency list, Output: tibble.
+build_clue_table <- function(dat, adj){
+  tibble::tibble(
+    hiding_spot = dat$hiding_spot,
+    outgoing_spots = map_chr(adj, ~ if(length(.x) == 0) "" else paste(dat$hiding_spot[.x], collapse = " | ")),
+    outgoing_clues = map_chr(adj, ~ if(length(.x) == 0) "" else paste(dat$clues_to_this_spot[.x], collapse = " | "))
+  );
+};
+
+# Write outputs ----
+output_dir <- "output";
+if(!dir.exists(output_dir)) dir.create(output_dir);
+
+dot_path <- file.path(output_dir, "graph.dot");
+svg_path <- file.path(output_dir, "graph.svg");
+spreadsheet_path <- file.path(output_dir, "clue_graph.csv");
+
+dot_text <- build_dot_string(dat2, adj);
+writeLines(dot_text, dot_path);
+
+# Render SVG (requires `dot` from Graphviz installed)
+if(Sys.which("dot") != ""){
+  system2("dot", c("-Tsvg", dot_path, "-o", svg_path));
+} else {
+  warning("Graphviz 'dot' not found; SVG not generated.");
+}
+
+clue_table <- build_clue_table(dat2, adj);
+rio::export(clue_table, spreadsheet_path);
