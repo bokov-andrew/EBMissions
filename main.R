@@ -181,3 +181,48 @@ dat2 <- dat1 %>% find_eligible_targets();
 
 # Preview processed data ----
 dat2 %>% select(hiding_spot, subcluster_vec, eligible_targets);
+
+# Graph Construction ----
+
+# Function: build_graph
+# Purpose: Randomly connect nodes into a directed graph respecting constraints. Input: processed data frame, Output: adjacency list (list of vectors of target indices).
+build_graph <- function(dat){
+  nn <- nrow(dat);
+  adj <- vector("list", nn);
+  incoming <- rep(0, nn);
+
+  # First pass: assign outgoing edges where possible
+  for (ii in 1:nn) {
+    max_out <- dat$max_outgoing_edges[ii];
+    eligible <- dat$eligible_targets[[ii]];
+    eligible <- setdiff(eligible, ii);  # no self-loops
+    candidates <- eligible[incoming[eligible] < dat$max_incoming_edges[eligible]];
+    current_out <- length(adj[[ii]]);
+    can_add <- max_out - current_out;
+    if (can_add > 0 && length(candidates) > 0) {
+      num_to_add <- min(can_add, length(candidates));
+      selected <- sample(candidates, num_to_add);
+      adj[[ii]] <- c(adj[[ii]], selected);
+      incoming[selected] <- incoming[selected] + 1;
+    };
+  };
+
+  # Second pass: ensure min incoming edges
+  for (ii in 1:nn) {
+    if (dat$max_incoming_edges[ii] > 0 && incoming[ii] == 0) {
+      possible_sources <- which(sapply(dat$eligible_targets, function(x) ii %in% x));
+      possible_sources <- setdiff(possible_sources, ii);
+      possible_sources <- possible_sources[sapply(adj[possible_sources], length) < dat$max_outgoing_edges[possible_sources]];
+      if (length(possible_sources) > 0) {
+        source <- sample(possible_sources, 1);
+        adj[[source]] <- c(adj[[source]], ii);
+        incoming[ii] <- incoming[ii] + 1;
+      };
+    };
+  };
+
+  adj;
+};
+
+# Build the graph ----
+graph_adj <- dat2 %>% build_graph();
