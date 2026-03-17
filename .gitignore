@@ -4,3 +4,7 @@
 .Ruserdata
 service-account.json
 sheet_id.txt
+
+# Editor and output artifacts
+.vscode/
+output/
