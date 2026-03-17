@@ -77,6 +77,25 @@ library(tidyverse);  # makes R suck even less than it already does
 
 # global variables ----
 data_path <- NULL;
+output_dir <- "output";
+seed <- NULL;
+
+# command-line argument parsing ----
+args <- commandArgs(trailingOnly = TRUE);
+if(length(args) > 0){
+  for(arg in args){
+    if(arg %in% c("-h", "--help")){
+      cat("Usage: Rscript main.R [--data=path] [--output=dir] [--seed=num]\n");
+      quit(status = 0);
+    }
+    if(grepl("^--data=", arg)) data_path <- sub("^--data=", "", arg);
+    else if(grepl("^--output=", arg)) output_dir <- sub("^--output=", "", arg);
+    else if(grepl("^--seed=", arg)) seed <- as.integer(sub("^--seed=", "", arg));
+    else stop("Unknown argument: ", arg);
+  }
+}
+
+if(!is.null(seed)) set.seed(seed);
 
 # read in data ----
 # Read the data. If none specified, generate an example input table as specified above
@@ -291,8 +310,7 @@ build_clue_table <- function(dat, adj){
 };
 
 # Write outputs ----
-output_dir <- "output";
-if(!dir.exists(output_dir)) dir.create(output_dir);
+if(!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE);
 
 dot_path <- file.path(output_dir, "graph.dot");
 svg_path <- file.path(output_dir, "graph.svg");
