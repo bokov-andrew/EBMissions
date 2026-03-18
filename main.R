@@ -79,6 +79,16 @@ library(tidyverse);  # makes R suck even less than it already does
 data_path <- NULL;
 output_dir <- "output";
 seed <- NULL;
+# For now, set defaults right in here. Later might get them from arguments and put them here
+data_spec <- tibble(
+  hiding_spot='MISSING'
+  ,clues_to_this_spot='MISSING'
+  ,max_incoming_edges=3
+  ,max_outgoing_edges=3
+  ,subclusters='DEFAULT'
+  ,node_id=''
+  ,outgoing_nodes=''
+)
 
 # command-line argument parsing ----
 args <- commandArgs(trailingOnly = TRUE);
@@ -130,55 +140,31 @@ if(!is.null(data_path) && file.exists(data_path)){ dat0 <- import(data_path)
 );
 }
 
+# functions ----
+
+# this function will coerce columns in a data.frame if required columns don't
+# exist or have the wrong datatype or invalid values.
+# TODO: add a test to confirm that this function will turn literally any
+# data.frame into valid input
+fn_force_valid_input <- function(data,spec=data_spec){
+  vctrs::vec_cast_common(data,spec)[[1]] %>%
+    mutate(across(any_of(setdiff(names(spec),'node_id')),~ coalesce(.x,spec[[cur_column()]]))
+           ,across(ends_with('_edges'),~ifelse(.x<0,spec[[cur_column()]],.x))
+           # half assed dynamic generation of node_ids
+           ,temp_node_id = make.unique(sapply(str_extract_all(tolower(hiding_spot), "\\w+"), \(x) paste(head(x, 3), collapse = "_")), sep = "_")
+           ,node_id = coalesce(node_id,temp_node_id)
+           # the temp_node_id is no longer needed, so remove
+           ,temp_node_id = NULL)
+}
+
+dat1 <- fn_force_valid_input(dat0);
+
+
 
 # Input Validation ----
 
-# Function: validate_input_table
+# Function: validate_input_table (REMOVED, replaced by fn_force_valid_input above)
 # Purpose: Check that input table has all required columns with correct types. Input: data frame, Output: TRUE or error.
-validate_input_table <- function(tbl){
-  required_cols <- c("hiding_spot", "clues_to_this_spot", "max_incoming_edges", "max_outgoing_edges", "subclusters", "node_id", "outgoing_nodes");
-
-  missing_cols <- setdiff(required_cols, names(tbl));
-  if(length(missing_cols) > 0){
-    stop("Missing required columns: ", paste(missing_cols, collapse = ", "));
-  }
-
-  if(!is.character(tbl$hiding_spot)){
-    stop("Column 'hiding_spot' must be character");
-  }
-  if(!is.character(tbl$clues_to_this_spot)){
-    stop("Column 'clues_to_this_spot' must be character");
-  }
-  if(!is.numeric(tbl$max_incoming_edges)){
-    stop("Column 'max_incoming_edges' must be numeric");
-  }
-  if(!is.numeric(tbl$max_outgoing_edges)){
-    stop("Column 'max_outgoing_edges' must be numeric");
-  }
-  if(!is.character(tbl$subclusters)){
-    stop("Column 'subclusters' must be character");
-  }
-  if(!is.character(tbl$node_id)){
-    stop("Column 'node_id' must be character");
-  }
-  if(!is.character(tbl$outgoing_nodes)){
-    stop("Column 'outgoing_nodes' must be character");
-  }
-
-  if(any(tbl$max_incoming_edges < 0) || any(tbl$max_outgoing_edges < 0)){
-    stop("max_incoming_edges and max_outgoing_edges must be non-negative");
-  }
-
-  if(any(duplicated(tbl$hiding_spot))){
-    stop("hiding_spot values must be unique");
-  }
-
-  if(any(duplicated(tbl$node_id))){
-    stop("node_id values must be unique");
-  }
-
-  TRUE;
-};
 
 # Subcluster Processing and Node Eligibility ----
 
@@ -186,8 +172,7 @@ validate_input_table <- function(tbl){
 # Purpose: Split subclusters by ':' and assign DEFAULT where needed. Input: data frame, Output: data frame with subcluster_vec list column.
 process_subclusters <- function(tbl){
   tbl %>% mutate(
-    subcluster_vec = ifelse(
-      is.na(subclusters) | subclusters == "",
+    subcluster_vec = ifelse(      is.na(subclusters) | subclusters == "",
       list("DEFAULT"),
       strsplit(subclusters, ":")
     )
@@ -219,13 +204,12 @@ find_eligible_targets <- function(tbl){
 };
 
 # Process and prepare data ----
-dat0 %>% validate_input_table();
-dat1 <- dat0 %>% process_subclusters();
-dat2 <- dat1 %>% find_eligible_targets();
+dat2 <- dat1 %>% process_subclusters();
+dat3 <- dat2 %>% find_eligible_targets();
 
 # Preview processed data ----
 # (disabled for non-interactive runs)
-# dat2 %>% select(hiding_spot, subcluster_vec, eligible_targets);
+# dat3 %>% select(hiding_spot, subcluster_vec, eligible_targets);
 
 # Graph Construction ----
 
@@ -304,7 +288,7 @@ build_graph <- function(dat, max_attempts = 100){
 };
 
 # Build the graph ----
-graph_result <- build_graph(dat2);
+graph_result <- build_graph(dat3);
 adj <- graph_result$adj;
 
 # Output Generation ----
@@ -329,13 +313,13 @@ build_dot_string <- function(dat, adj){
 
 # Function: build_clue_table
 # Purpose: Build a table with all input columns plus populated outgoing_nodes and outgoing_clues. Input: dat0, dat2, adj, Output: tibble.
-build_clue_table <- function(dat0, dat2, adj){
+build_clue_table <- function(dat0, dat2, adj) {
   dat0 %>%
     mutate(
       outgoing_nodes = map_chr(adj, ~ if(length(.x) == 0) "" else paste(dat2$node_id[.x], collapse = ":")),
       outgoing_clues = map_chr(adj, ~ if(length(.x) == 0) "" else paste(dat2$clues_to_this_spot[.x], collapse = " | "))
-    );
-};
+    )
+}
 
 # Write outputs ----
 if(!dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE);
@@ -344,7 +328,7 @@ dot_path <- file.path(output_dir, "graph.dot");
 svg_path <- file.path(output_dir, "graph.svg");
 spreadsheet_path <- file.path(output_dir, "clue_graph.csv");
 
-dot_text <- build_dot_string(dat2, adj);
+dot_text <- build_dot_string(dat3, adj);
 writeLines(dot_text, dot_path);
 
 # Render SVG (requires `dot` from Graphviz installed)
