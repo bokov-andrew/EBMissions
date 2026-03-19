@@ -26,7 +26,7 @@ At a minimum, contributors should have:
 
 ## Coding expectations
 
-- Keep repo-wide workflow guidance in this file so it stays useful to humans, Copilot, and other coding agents.
+- Keep repo-wide workflow guidance in this file so it stays useful to humans, Copilot, Codex, and other coding agents.
 - Keep code-specific R conventions in the source files where they are most relevant.
 - Prefer small, reviewable pull requests.
 - If code behavior changes, update any affected documentation and issue acceptance criteria in the same change.
