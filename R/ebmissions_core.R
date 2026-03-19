@@ -275,7 +275,7 @@ run_ebmissions <- function(data_path = NULL, output_dir = "output", seed = NULL)
     set.seed(seed);
   }
 
-  normalized_dat <- read_input_data(data_path = data_path) %>% fn_force_valid_input(raw_dat);
+  normalized_dat <- read_input_data(data_path = data_path) %>% fn_force_valid_input();
   processed_dat <- normalized_dat %>% process_subclusters() %>% find_eligible_targets();
   graph_result <- build_graph(processed_dat);
   adj <- graph_result$adj;
