@@ -315,7 +315,7 @@ run_ebmissions <- function(data_path = NULL, output_dir = "output", seed = NULL)
 
   writeLines(build_dot_string(processed_dat, adj), dot_path);
   graph_stuff <- write_svg_graph(processed_dat, adj, svg_path);
-  clue_table <- build_clue_table(normalized_dat, adj);
+  clue_table <- build_clue_table(processed_dat, adj);
   rio::export(clue_table, csv_path);
 
   list(
