@@ -3,6 +3,7 @@
 # libraries ____
 library(rio);
 library(tidyverse);
+library(igraph);
 
 # global defaults ____
 data_spec <- tibble(
