@@ -1,11 +1,11 @@
 # Shared constants and functions for the EBMissions graph generator.
 
-# libraries ____
+# libraries ----
 library(rio);
 library(tidyverse);
 library(igraph);
 
-# global defaults ____
+# global defaults ----
 data_spec <- tibble(
   hiding_spot = "MISSING"
   ,clues_to_this_spot = "MISSING"
